@@ -1,0 +1,9 @@
+apiVersion: managed.stevesloka.com/v1beta1
+kind: ManagedDeployment
+metadata:
+  labels:
+    controller-tools.k8s.io: "1.0"
+  name: manageddeployment-sample
+spec:
+  # Add fields here
+  rolloutStrategy: Canary

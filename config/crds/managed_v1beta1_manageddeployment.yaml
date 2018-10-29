@@ -1,0 +1,41 @@
+apiVersion: apiextensions.k8s.io/v1beta1
+kind: CustomResourceDefinition
+metadata:
+  creationTimestamp: null
+  labels:
+    controller-tools.k8s.io: "1.0"
+  name: manageddeployments.managed.stevesloka.com
+spec:
+  group: managed.stevesloka.com
+  names:
+    kind: ManagedDeployment
+    plural: manageddeployments
+  scope: Namespaced
+  validation:
+    openAPIV3Schema:
+      properties:
+        apiVersion:
+          type: string
+        kind:
+          type: string
+        metadata:
+          type: object
+        spec:
+          properties:
+            rolloutStrategy:
+              enum:
+              - Canary
+              - BlueGreen
+              type: string
+          required:
+          - rolloutStrategy
+          type: object
+        status:
+          type: object
+  version: v1beta1
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: []
+  storedVersions: []
