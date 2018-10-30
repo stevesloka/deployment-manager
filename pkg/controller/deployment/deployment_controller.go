@@ -18,11 +18,15 @@ package deployment
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 
+	semver "github.com/coreos/go-semver/semver"
+	managedv1beta1 "github.com/stevesloka/deployment-manager/pkg/apis/managed/v1beta1"
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -32,10 +36,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
-/**
-* USER ACTION REQUIRED: This is a scaffold file intended for the user to modify with their own Controller
-* business logic.  Delete these comments after modifying this file.*
- */
+const managedLabelKey = "managed.stevesloka.com"
+const managedLabelVersion = "0.0.1"
 
 // Add creates a new Deployment Controller and adds it to the Manager with default RBAC. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
@@ -80,12 +82,21 @@ type ReconcileDeployment struct {
 // a Deployment as an example
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 func (r *ReconcileDeployment) Reconcile(request reconcile.Request) (reconcile.Result, error) {
-	// Fetch the Deployment instance
+	// Fetch the ManagedDeployment instance
 	instance := &appsv1.Deployment{}
 	err := r.Get(context.TODO(), request.NamespacedName, instance)
 	if err != nil {
-
 		if errors.IsNotFound(err) {
+			fmt.Println("---------------- Deployment not found")
+
+			instanceManaged := &managedv1beta1.ManagedDeployment{}
+			err = r.Get(context.TODO(), request.NamespacedName, instanceManaged)
+			if err == nil {
+				err = r.Delete(context.TODO(), instanceManaged)
+				if err != nil {
+					fmt.Println("---------- ERROR deleting managed resource: ", err)
+				}
+			}
 			// Object not found, return.  Created objects are automatically garbage collected.
 			// For additional cleanup logic use finalizers.
 			return reconcile.Result{}, nil
@@ -94,42 +105,59 @@ func (r *ReconcileDeployment) Reconcile(request reconcile.Request) (reconcile.Re
 		return reconcile.Result{}, err
 	}
 
-	// name of your custom finalizer
-	myFinalizerName := "finalizers.managed.stevesloka.com/finalizer"
+	// Serialize the deployment to json
+	deploymentSerialized, err := json.Marshal(instance)
+	if err != nil {
+		fmt.Println("----------- ERROR serialzing struct to json", err)
+		return reconcile.Result{}, err
+	}
 
-	if instance.ObjectMeta.GetDeletionTimestamp().IsZero() {
-		if !containsString(instance.ObjectMeta.Finalizers, myFinalizerName) {
-			instance.ObjectMeta.Finalizers = append(instance.ObjectMeta.Finalizers, myFinalizerName)
-			if err := r.Update(context.Background(), instance); err != nil {
-				return reconcile.Result{Requeue: true}, nil
+	// Only process Deployments if they are labeled as managed
+	if mapContains(instance.Labels) {
+		// Lookup manageddeployed
+		instanceManaged := &managedv1beta1.ManagedDeployment{}
+		err = r.Get(context.TODO(), request.NamespacedName, instanceManaged)
+		if err != nil {
+			if errors.IsNotFound(err) {
+				version := semver.New(managedLabelVersion)
+				version.BumpPatch()
+
+				instanceManaged = &managedv1beta1.ManagedDeployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      instance.Name,
+						Namespace: instance.Namespace,
+						Labels: map[string]string{
+							"managedVersion": version.String(),
+						},
+					},
+					Spec: managedv1beta1.ManagedDeploymentSpec{
+						PreviousConfiguration: string(deploymentSerialized),
+					},
+				}
+
+				err = r.Create(context.TODO(), instanceManaged)
+				if err != nil {
+					fmt.Println("------- ERROR creating managed crd")
+					return reconcile.Result{}, err
+				}
+			}
+		} else {
+			// Get the previous version
+			version := semver.New(instanceManaged.Labels["managedVersion"])
+			version.BumpPatch()
+
+			// Update the CRD
+			instanceManaged.Labels = map[string]string{
+				"managedVersion": version.String(),
 			}
 
-			// Handle sync here
-			fmt.Println("----- Deployment changed: ", instance.GetName())
-
-		}
-	} else {
-		// The object is being deleted
-		if containsString(instance.ObjectMeta.Finalizers, myFinalizerName) {
-			// our finalizer is present, so lets handle our external dependency
-			err := r.deleteExternalDependency(instance)
+			instanceManaged.Spec.PreviousConfiguration = string(deploymentSerialized)
+			err = r.Update(context.TODO(), instanceManaged)
 			if err != nil {
-				// if fail to delete the external dependency here, return with error
-				// so that it can be retried
+				fmt.Println("------- ERROR updating managed crd")
 				return reconcile.Result{}, err
 			}
-
-			// remove our finalizer from the list and update it.
-			instance.ObjectMeta.Finalizers = removeString(instance.ObjectMeta.Finalizers, myFinalizerName)
-			if err := r.Update(context.Background(), instance); err != nil {
-				return reconcile.Result{Requeue: true}, nil
-			}
-
-			fmt.Println("----- Deployment deleted: ", instance.GetName())
-		} else {
-			fmt.Println("-------- bad logic yo!")
 		}
-
 	}
 
 	return reconcile.Result{}, nil
@@ -165,4 +193,13 @@ func removeString(slice []string, s string) (result []string) {
 		result = append(result, item)
 	}
 	return
+}
+
+func mapContains(values map[string]string) bool {
+	if val, ok := values[managedLabelKey]; ok {
+		if val == "true" {
+			return true
+		}
+	}
+	return false
 }

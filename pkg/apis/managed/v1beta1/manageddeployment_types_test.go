@@ -36,7 +36,7 @@ func TestStorageManagedDeployment(t *testing.T) {
 			Namespace: "default",
 		},
 		Spec: ManagedDeploymentSpec{
-			RolloutStrategy: "Canary",
+			// RolloutStrategy: "Canary",
 		},
 	}
 	g := gomega.NewGomegaWithT(t)

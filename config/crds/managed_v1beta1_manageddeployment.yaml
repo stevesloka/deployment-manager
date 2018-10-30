@@ -22,13 +22,8 @@ spec:
           type: object
         spec:
           properties:
-            rolloutStrategy:
-              enum:
-              - Canary
-              - BlueGreen
+            previousConfiguration:
               type: string
-          required:
-          - rolloutStrategy
           type: object
         status:
           type: object

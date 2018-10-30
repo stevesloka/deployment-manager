@@ -104,7 +104,7 @@ func (r *ReconcileManagedDeployment) Reconcile(request reconcile.Request) (recon
 		return reconcile.Result{}, err
 	}
 
-	fmt.Println("----------- ManagedDeploymentCRD Changed!")
+	fmt.Println("----------- ManagedDeploymentCRD Changed! ", instance.GetName())
 
 	// // TODO(user): Change this to be the object type created by your controller
 	// // Define the desired Deployment object
