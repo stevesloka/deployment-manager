@@ -25,7 +25,7 @@ type ManagedDeploymentSpec struct {
 	// RolloutStrategy determines how deployments will be rolled out
 	// Valid types are: `Canary` & `BlueGreen`
 	// +kubebuilder:validation:Enum=Canary,BlueGreen
-	// RolloutStrategy string `json:"rolloutStrategy"`
+	RolloutStrategy string `json:"rolloutStrategy"`
 
 	// PreviousConfiguration stores the previous configuration
 	PreviousConfiguration string `json:"previousConfiguration,omitempty"`

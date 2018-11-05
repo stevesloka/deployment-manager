@@ -143,8 +143,11 @@ func (r *ReconcileDeployment) Reconcile(request reconcile.Request) (reconcile.Re
 			}
 		} else {
 			// Get the previous version
-			version := semver.New(instanceManaged.Labels["managedVersion"])
-			version.BumpPatch()
+			version := semver.New("0.0.0")
+			if val, ok := instanceManaged.Labels["managedVersion"]; ok {
+				version = semver.New(val)
+				version.BumpPatch()
+			}
 
 			// Update the CRD
 			instanceManaged.Labels = map[string]string{
